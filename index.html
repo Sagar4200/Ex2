@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sagar Sports Quiz & Verification</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Tiro+Bangla&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Firebase Compat CDN -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+    <style>
+        /* ================= CYBERPUNK & GLASSMORPHISM THEME ================= */
+        :root {
+            --neon-cyan: #0ff;
+            --neon-pink: #f0f;
+            --neon-gold: #ffd700;
+            --dark-bg: #050510;
+        }
+        
+        body {
+            font-family: 'Inter', 'Tiro Bangla', sans-serif;
+            background-color: var(--dark-bg);
+            color: #fff;
+            margin: 0;
+            min-height: 100vh;
+            overflow-x: hidden;
+            background-image: 
+                linear-gradient(rgba(5, 5, 16, 0.85), rgba(5, 5, 16, 0.95)),
+                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.03) 2px, rgba(0, 255, 255, 0.03) 4px);
+        }
+
+        .cyber-font { font-family: 'Rajdhani', 'Tiro Bangla', sans-serif; }
+
+        .glass-panel {
+            background: rgba(10, 10, 25, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .neon-border-cyan { border: 1px solid var(--neon-cyan); box-shadow: 0 0 8px rgba(0, 255, 255, 0.3), inset 0 0 8px rgba(0, 255, 255, 0.2); }
+        .neon-border-pink { border: 1px solid var(--neon-pink); box-shadow: 0 0 8px rgba(255, 0, 255, 0.3), inset 0 0 8px rgba(255, 0, 255, 0.2); }
+        .neon-border-gold { border: 1px solid var(--neon-gold); box-shadow: 0 0 8px rgba(255, 215, 0, 0.3), inset 0 0 8px rgba(255, 215, 0, 0.2); }
+        
+        .neon-text-cyan { color: var(--neon-cyan); text-shadow: 0 0 8px rgba(0, 255, 255, 0.6); }
+        .neon-text-pink { color: var(--neon-pink); text-shadow: 0 0 8px rgba(255, 0, 255, 0.6); }
+        .neon-text-gold { color: var(--neon-gold); text-shadow: 0 0 8px rgba(255, 215, 0, 0.6); }
+
+        /* Form Inputs */
+        input[type="text"], input[type="password"] {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            color: #0ff;
+            transition: all 0.3s ease;
+        }
+        input:focus { outline: none; border-color: var(--neon-pink); box-shadow: 0 0 8px rgba(255, 0, 255, 0.5); }
+
+        /* File Upload Inputs */
+        input[type="file"] { display: none; }
+        .file-label {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 14px; background: rgba(0, 0, 0, 0.4);
+            border: 1px dashed rgba(0, 255, 255, 0.4); border-radius: 8px;
+            cursor: pointer; transition: all 0.3s ease;
+        }
+        .file-label:hover, .file-label.has-file { border-color: var(--neon-pink); background: rgba(255, 0, 255, 0.05); }
+
+        /* Buttons */
+        .btn-cyber {
+            background: transparent; color: var(--neon-cyan); border: 1px solid var(--neon-cyan);
+            text-transform: uppercase; font-weight: bold; position: relative; overflow: hidden; transition: 0.2s;
+        }
+        .btn-cyber:hover { background: var(--neon-cyan); color: #000; box-shadow: 0 0 15px var(--neon-cyan); }
+        
+        .btn-gold {
+            background: transparent; color: var(--neon-gold); border: 1px solid var(--neon-gold);
+            text-transform: uppercase; font-weight: bold; transition: 0.2s;
+        }
+        .btn-gold:hover { background: var(--neon-gold); color: #000; box-shadow: 0 0 15px var(--neon-gold); }
+
+        .btn-quiz-option {
+            background: rgba(0, 0, 0, 0.6); border: 1px solid var(--neon-cyan); color: #fff;
+            transition: all 0.2s; cursor: pointer;
+        }
+        .btn-quiz-option:hover { background: rgba(0, 255, 255, 0.2); box-shadow: 0 0 10px rgba(0, 255, 255, 0.4); }
+
+        /* Utilities */
+        .loader {
+            border: 2px solid rgba(0,255,255,0.2); border-top: 2px solid var(--neon-cyan);
+            border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="antialiased relative flex flex-col items-center p-4">
+
+    <!-- Navbar -->
+    <nav class="w-full flex justify-between items-center py-4 px-2 max-w-lg md:max-w-5xl mx-auto z-20 relative">
+        <div class="cyber-font text-2xl font-bold neon-text-cyan tracking-wider">SAGAR_SPORTS</div>
+        <button id="sidebarToggleBtn" class="text-white hover:text-cyan-400 transition flex flex-col gap-1.5 p-2 z-50">
+            <span class="block w-6 h-0.5 bg-cyan-400 shadow-[0_0_5px_#0ff]"></span>
+            <span class="block w-6 h-0.5 bg-cyan-400 shadow-[0_0_5px_#0ff]"></span>
+            <span class="block w-6 h-0.5 bg-cyan-400 shadow-[0_0_5px_#0ff]"></span>
+        </button>
+    </nav>
+
+    <!-- Main Content Wrapper -->
+    <main class="w-full max-w-lg flex-grow flex flex-col relative z-10" id="mainContainer">
+        
+        <!-- ================= 1. INTRO SCREEN ================= -->
+        <section id="introScreen" class="glass-panel neon-border-gold rounded-xl p-8 w-full mt-10 text-center flex flex-col items-center transition-all duration-500">
+            <div class="relative w-32 h-32 mb-6">
+                <div class="absolute inset-0 rounded-full neon-border-cyan animate-pulse"></div>
+                <!-- Profile Image with fallback to placeholder -->
+                <img src="https://i.ibb.co/21sF3x84/sagar.jpg" 
+                     onerror="this.src='https://placehold.co/400x400/050510/0ff?text=Sagar+Biswas'" 
+                     alt="Sagar Biswas" 
+                     class="w-full h-full rounded-full object-cover border-2 border-cyan-400 relative z-10">
+            </div>
+            <h2 class="text-sm text-cyan-400 cyber-font tracking-widest uppercase mb-1">Organized By</h2>
+            <h1 class="text-3xl font-bold neon-text-pink cyber-font tracking-wide mb-6">Sagar Biswas</h1>
+            
+            <div class="bg-black/50 border border-gold-500/50 p-4 rounded-lg mb-8 w-full neon-border-gold">
+                <p class="text-lg text-white font-semibold">৩টি সহজ ক্রিকেট প্রশ্নের উত্তর দিন!</p>
+                <p class="text-2xl font-bold neon-text-gold mt-2 cyber-font animate-bounce">WIN ₹400 - ₹1000</p>
+                <p class="text-xs text-gray-400 mt-1">কুইজ জেতার পর ভেরিফিকেশন ফর্ম পূরণ করুন</p>
+            </div>
+
+            <button id="startQuizBtn" class="w-full btn-gold py-4 px-6 rounded-lg cyber-font text-xl tracking-widest flex justify-center items-center gap-2">
+                START QUIZ GAME
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            </button>
+        </section>
+
+        <!-- ================= 2. QUIZ SCREEN ================= -->
+        <section id="quizScreen" class="hidden glass-panel neon-border-cyan rounded-xl p-6 w-full mt-10 transition-all duration-500">
+            <div class="flex justify-between items-center mb-6 border-b border-cyan-500/30 pb-3">
+                <h2 class="text-xl font-bold neon-text-cyan cyber-font tracking-widest">CRICKET_QUIZ</h2>
+                <span id="quizProgress" class="text-sm font-mono text-pink-400 bg-pink-900/30 px-2 py-1 rounded">1 / 3</span>
+            </div>
+
+            <div id="questionContainer" class="min-h-[200px] flex flex-col justify-center">
+                <h3 id="questionText" class="text-xl md:text-2xl font-semibold text-white mb-6 text-center leading-relaxed">
+                    <!-- Question will be injected here -->
+                </h3>
+                
+                <div id="optionsContainer" class="space-y-3">
+                    <!-- Options injected here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= 3. REGISTRATION FORM (Post-Quiz) ================= -->
+        <section id="formScreen" class="hidden glass-panel neon-border-pink rounded-xl p-6 sm:p-8 w-full mt-4 transition-all duration-500">
+            <div class="mb-6 border-b border-pink-500/30 pb-4 text-center">
+                <h1 class="text-2xl font-bold neon-text-gold cyber-font uppercase tracking-wide">
+                    🏆 YOU WON! 🏆
+                </h1>
+                <p class="text-cyan-200 mt-2 text-sm">প্রাইজমানি পেতে ডকুমেন্টস ভেরিফাই করুন</p>
+            </div>
+
+            <form id="playerForm" class="space-y-4" novalidate>
+                <!-- Names -->
+                <div>
+                    <label class="block text-xs font-medium text-cyan-400 mb-1 tracking-wider">খেলোয়াড়ের নাম</label>
+                    <input type="text" id="playerName" required placeholder="খেলোয়াড়ের নাম লিখুন" class="w-full rounded-lg px-4 py-2.5 placeholder-cyan-800/50 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-cyan-400 mb-1 tracking-wider">মায়ের নাম</label>
+                    <input type="text" id="motherName" required placeholder="মায়ের নাম লিখুন" class="w-full rounded-lg px-4 py-2.5 placeholder-cyan-800/50 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-cyan-400 mb-1 tracking-wider">ভাইয়ের নাম</label>
+                    <input type="text" id="brotherName" required placeholder="ভাইয়ের নাম লিখুন" class="w-full rounded-lg px-4 py-2.5 placeholder-cyan-800/50 text-sm">
+                </div>
+
+                <div class="border-t border-cyan-500/20 my-4 pt-4">
+                    <h3 class="text-sm font-bold text-pink-400 mb-3 uppercase">ডকুমেন্টস আপলোড</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-[11px] font-medium text-cyan-400 mb-1">নিজের ছবি</label>
+                            <label for="profilePhoto" class="file-label" id="label-profilePhoto">
+                                <span class="truncate text-cyan-700 text-sm">ছবি সিলেক্ট করুন...</span>
+                            </label>
+                            <input type="file" id="profilePhoto" accept="image/*" required>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-medium text-cyan-400 mb-1">আধার কার্ড</label>
+                                <label for="aadhaarPhoto" class="file-label" id="label-aadhaarPhoto">
+                                    <span class="truncate text-cyan-700 text-xs">সিলেক্ট...</span>
+                                </label>
+                                <input type="file" id="aadhaarPhoto" accept="image/*" required>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-medium text-cyan-400 mb-1">জন্ম শংসাপত্র</label>
+                                <label for="birthCertPhoto" class="file-label" id="label-birthCertPhoto">
+                                    <span class="truncate text-cyan-700 text-xs">সিলেক্ট...</span>
+                                </label>
+                                <input type="file" id="birthCertPhoto" accept="image/*" required>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-cyan-500/20 my-4 pt-4">
+                    <h3 class="text-sm font-bold text-pink-400 mb-3 uppercase">ভাইয়ের ডকুমেন্টস</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[11px] font-medium text-cyan-400 mb-1">ভাইয়ের আধার</label>
+                            <label for="brotherAadhaarPhoto" class="file-label" id="label-brotherAadhaarPhoto">
+                                <span class="truncate text-cyan-700 text-xs">সিলেক্ট...</span>
+                            </label>
+                            <input type="file" id="brotherAadhaarPhoto" accept="image/*" required>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-cyan-400 mb-1">ভাইয়ের জন্ম শংসাপত্র</label>
+                            <label for="brotherBirthCertPhoto" class="file-label" id="label-brotherBirthCertPhoto">
+                                <span class="truncate text-cyan-700 text-xs">সিলেক্ট...</span>
+                            </label>
+                            <input type="file" id="brotherBirthCertPhoto" accept="image/*" required>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" id="submitBtn" class="w-full mt-6 btn-cyber py-4 px-4 rounded-lg flex justify-center items-center gap-3">
+                    <span class="cyber-font text-lg tracking-widest text-cyan-400">CLAIM PRIZE & SUBMIT</span>
+                    <div class="loader" id="submitLoader"></div>
+                </button>
+            </form>
+        </section>
+
+        <!-- ================= 4. ADMIN DASHBOARD ================= -->
+        <section id="adminSection" class="hidden w-full transition-all duration-500 mt-4">
+            <div class="glass-panel neon-border-pink rounded-xl p-4 sm:p-6 w-full">
+                <div class="flex justify-between items-center mb-6 border-b border-pink-500/30 pb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold neon-text-pink cyber-font tracking-widest">ADMIN_PANEL</h2>
+                        <p class="text-xs text-pink-300/50">স্বাগতম, Sagar Biswas</p>
+                    </div>
+                    <button id="logoutBtn" class="border border-red-500 text-red-400 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition cyber-font tracking-wide">LOGOUT</button>
+                </div>
+                
+                <div id="playersList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Data injected here -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Admin Sidebar (Login) -->
+    <div id="adminSidebar" class="fixed top-0 right-0 w-72 h-full bg-black/95 backdrop-blur-xl border-l border-cyan-500/30 transform translate-x-full transition-transform duration-300 z-40 p-6 flex flex-col justify-center shadow-[-10px_0_30px_rgba(0,255,255,0.1)]">
+        <button id="sidebarCloseBtn" class="absolute top-4 right-4 text-cyan-500 hover:text-pink-500">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+        <div class="text-center mb-8">
+            <h3 class="text-2xl font-bold cyber-font neon-text-cyan tracking-widest">ADMIN_LOGIN</h3>
+        </div>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-[10px] text-cyan-400 mb-1 tracking-widest">USERNAME</label>
+                <input type="text" id="adminUser" placeholder="Enter Username" class="w-full rounded px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-[10px] text-cyan-400 mb-1 tracking-widest">PASSWORD</label>
+                <input type="password" id="adminPassword" placeholder="Enter Password" class="w-full rounded px-3 py-2 text-sm">
+            </div>
+            <button id="adminLoginBtn" class="w-full btn-cyber py-3 mt-4 rounded cyber-font tracking-widest text-sm">LOGIN</button>
+        </div>
+    </div>
+
+    <!-- Alert Modal (Replaces default alerts) -->
+    <div id="alertModal" class="fixed inset-0 bg-black/80 backdrop-blur-md hidden items-center justify-center z-[100] p-4">
+        <div class="glass-panel neon-border-pink p-6 rounded-xl w-full max-w-sm text-center">
+            <h3 id="alertTitle" class="text-xl font-bold mb-2 neon-text-pink cyber-font tracking-wider">SYSTEM_ALERT</h3>
+            <p id="alertMessage" class="text-sm text-cyan-100 mb-6 font-mono">Message</p>
+            <button id="closeAlertBtn" class="btn-cyber px-8 py-2 rounded transition text-sm">OK</button>
+        </div>
+    </div>
+    
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-30 hidden backdrop-blur-sm transition-opacity"></div>
+
+    <script>
+        // Wrapping everything in DOMContentLoaded to prevent any DOM reference errors
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // Firebase Configuration (Realtime Database specific)
+            const firebaseConfig = {
+                apiKey: "dummy-api-key-for-rtdb", 
+                databaseURL: "https://chat-bot-5bb8d-default-rtdb.asia-southeast1.firebasedatabase.app/"
+            };
+
+            // Initialize Firebase App
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            const db = firebase.database();
+            const playersRef = db.ref('player_verifications');
+            window.playersData = {}; 
+
+            // DOM Query Cache - O(1) Access time complexity after initialization
+            const screens = {
+                intro: document.getElementById('introScreen'),
+                quiz: document.getElementById('quizScreen'),
+                form: document.getElementById('formScreen'),
+                admin: document.getElementById('adminSection')
+            };
+            const mainContainer = document.getElementById('mainContainer');
+
+            // --- Modal Utility ---
+            const alertModal = document.getElementById('alertModal');
+            const alertTitle = document.getElementById('alertTitle');
+            const alertMessage = document.getElementById('alertMessage');
+            document.getElementById('closeAlertBtn').addEventListener('click', () => {
+                alertModal.classList.add('hidden');
+                alertModal.classList.remove('flex');
+            });
+            const showAlert = (title, message) => {
+                alertTitle.innerText = title;
+                alertMessage.innerText = message;
+                alertModal.classList.remove('hidden');
+                alertModal.classList.add('flex');
+            };
+
+            // ================= 1. QUIZ LOGIC =================
+            const quizData = [
+                { q: "১. বর্তমান ভারতীয় ক্রিকেট দলের অধিনায়ক কে?", options: ["বিরাট কোহলি", "রোহিত শর্মা", "এম এস ধোনি"], ans: "রোহিত শর্মা" },
+                { q: "২. ক্রিকেট খেলায় এক ওভারে কতগুলো বল থাকে?", options: ["৪ টি", "৬ টি", "৮ টি"], ans: "৬ টি" },
+                { q: "৩. ভারত ২০২৪ সালে কোন বিশ্বকাপ জিতেছে?", options: ["T20 বিশ্বকাপ", "ODI বিশ্বকাপ", "টেস্ট চ্যাম্পিয়নশিপ"], ans: "T20 বিশ্বকাপ" }
+            ];
+            
+            let currentQuestionIndex = 0;
+            const qText = document.getElementById('questionText');
+            const optionsContainer = document.getElementById('optionsContainer');
+            const qProgress = document.getElementById('quizProgress');
+
+            // Intro -> Quiz transition
+            document.getElementById('startQuizBtn').addEventListener('click', () => {
+                screens.intro.classList.add('hidden');
+                screens.quiz.classList.remove('hidden');
+                loadQuestion(currentQuestionIndex);
+            });
+
+            function loadQuestion(index) {
+                qProgress.innerText = `${index + 1} / ${quizData.length}`;
+                const q = quizData[index];
+                qText.innerText = q.q;
+                
+                optionsContainer.innerHTML = '';
+                q.options.forEach(opt => {
+                    const btn = document.createElement('button');
+                    btn.className = "w-full text-left px-4 py-3 rounded-lg btn-quiz-option text-sm sm:text-base font-semibold";
+                    btn.innerText = opt;
+                    btn.onclick = () => handleAnswer(opt, q.ans);
+                    optionsContainer.appendChild(btn);
+                });
+            }
+
+            function handleAnswer(selected, correct) {
+                // To keep it simple for kids, we accept any answer but visually proceed.
+                // You can add validation if needed.
+                currentQuestionIndex++;
+                if (currentQuestionIndex < quizData.length) {
+                    loadQuestion(currentQuestionIndex);
+                } else {
+                    // Quiz Complete! Show Form
+                    screens.quiz.classList.add('hidden');
+                    screens.form.classList.remove('hidden');
+                }
+            }
+
+
+            // ================= 2. FORM & FILE UPLOAD LOGIC =================
+            const fileInputs = [
+                { id: 'profilePhoto', label: 'label-profilePhoto' },
+                { id: 'aadhaarPhoto', label: 'label-aadhaarPhoto' },
+                { id: 'birthCertPhoto', label: 'label-birthCertPhoto' },
+                { id: 'brotherAadhaarPhoto', label: 'label-brotherAadhaarPhoto' },
+                { id: 'brotherBirthCertPhoto', label: 'label-brotherBirthCertPhoto' }
+            ];
+
+            fileInputs.forEach(inputObj => {
+                const el = document.getElementById(inputObj.id);
+                if (el) {
+                    el.addEventListener('change', function() {
+                        const label = document.getElementById(inputObj.label);
+                        const textSpan = label.querySelector('span');
+                        if (this.files && this.files[0]) {
+                            textSpan.innerText = this.files[0].name;
+                            textSpan.classList.replace('text-cyan-700', 'text-pink-400');
+                            label.classList.add('has-file');
+                        } else {
+                            textSpan.innerText = "সিলেক্ট...";
+                            textSpan.classList.replace('text-pink-400', 'text-cyan-700');
+                            label.classList.remove('has-file');
+                        }
+                    });
+                }
+            });
+
+            // Safe Base64 Image Compression to avoid RTDB limits
+            const processImageToBase64 = (file) => {
+                return new Promise((resolve, reject) => {
+                    if (!file) { resolve(null); return; }
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            let w = img.width, h = img.height;
+                            const MAX = 500; // Resize to max 500px for safety
+                            if (w > h && w > MAX) { h *= MAX / w; w = MAX; } 
+                            else if (h > MAX) { w *= MAX / h; h = MAX; }
+                            canvas.width = w; canvas.height = h;
+                            
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, w, h);
+                            resolve(canvas.toDataURL('image/jpeg', 0.6)); // 60% quality jpeg
+                        };
+                        img.onerror = () => resolve(event.target.result);
+                        img.src = event.target.result;
+                    };
+                    reader.onerror = () => reject("Error");
+                    reader.readAsDataURL(file);
+                });
+            };
+
+            const playerForm = document.getElementById('playerForm');
+            const submitBtn = document.getElementById('submitBtn');
+            const submitLoader = document.getElementById('submitLoader');
+
+            playerForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                if (!playerForm.checkValidity()) {
+                    showAlert("অসম্পূর্ণ তথ্য", "অনুগ্রহ করে ফর্মের সমস্ত প্রয়োজনীয় ঘর পূরণ করুন।");
+                    return;
+                }
+
+                // File validation
+                for (let input of fileInputs) {
+                    const el = document.getElementById(input.id);
+                    if (!el.files || el.files.length === 0) {
+                        showAlert("ছবি অনুপস্থিত", "দয়া করে ৫টি ছবি আপলোড করুন।");
+                        return;
+                    }
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.querySelector('span').innerText = 'UPLOADING...';
+                submitLoader.style.display = 'block';
+
+                try {
+                    const b64Data = await Promise.all([
+                        processImageToBase64(document.getElementById('profilePhoto').files[0]),
+                        processImageToBase64(document.getElementById('aadhaarPhoto').files[0]),
+                        processImageToBase64(document.getElementById('birthCertPhoto').files[0]),
+                        processImageToBase64(document.getElementById('brotherAadhaarPhoto').files[0]),
+                        processImageToBase64(document.getElementById('brotherBirthCertPhoto').files[0])
+                    ]);
+
+                    // Algorithmic Complexity: O(1) network operation setup
+                    await playersRef.push({
+                        playerName: document.getElementById('playerName').value.trim(),
+                        motherName: document.getElementById('motherName').value.trim(),
+                        brotherName: document.getElementById('brotherName').value.trim(),
+                        profilePhoto: b64Data[0],
+                        aadhaarPhoto: b64Data[1],
+                        birthCertPhoto: b64Data[2],
+                        brotherAadhaarPhoto: b64Data[3],
+                        brotherBirthCertPhoto: b64Data[4],
+                        timestamp: firebase.database.ServerValue.TIMESTAMP
+                    });
+
+                    showAlert("সফল", "আপনার ডকুমেন্টস সফলভাবে জমা হয়েছে! ভেরিফিকেশনের পর প্রাইজমানি পাঠানো হবে।");
+                    
+                    // Reset UI
+                    playerForm.reset();
+                    fileInputs.forEach(inputObj => {
+                        const label = document.getElementById(inputObj.label);
+                        label.classList.remove('has-file');
+                        label.querySelector('span').innerText = "সিলেক্ট...";
+                        label.querySelector('span').className = "truncate text-cyan-700 text-xs";
+                    });
+                    
+                    // Return to Intro
+                    screens.form.classList.add('hidden');
+                    screens.intro.classList.remove('hidden');
+                    currentQuestionIndex = 0;
+
+                } catch (error) {
+                    showAlert("ব্যর্থ", "ইন্টারনেট কানেকশন চেক করুন এবং আবার চেষ্টা করুন।");
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.querySelector('span').innerText = 'CLAIM PRIZE & SUBMIT';
+                    submitLoader.style.display = 'none';
+                }
+            });
+
+
+            // ================= 3. ADMIN PANEL LOGIC =================
+            const sidebar = document.getElementById('adminSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            
+            const toggleSidebar = () => {
+                if (sidebar.classList.contains('translate-x-full')) {
+                    sidebar.classList.remove('translate-x-full');
+                    overlay.classList.remove('hidden');
+                } else {
+                    sidebar.classList.add('translate-x-full');
+                    overlay.classList.add('hidden');
+                    document.getElementById('adminUser').value = '';
+                    document.getElementById('adminPassword').value = '';
+                }
+            };
+
+            document.getElementById('sidebarToggleBtn').addEventListener('click', toggleSidebar);
+            document.getElementById('sidebarCloseBtn').addEventListener('click', toggleSidebar);
+            overlay.addEventListener('click', toggleSidebar);
+
+            document.getElementById('adminLoginBtn').addEventListener('click', () => {
+                const user = document.getElementById('adminUser').value;
+                const pass = document.getElementById('adminPassword').value;
+                
+                // Admin Credentials verification
+                if (user === 'Sagar Biswas' && pass === '741501') {
+                    toggleSidebar();
+                    // Hide all screens, show admin
+                    Object.values(screens).forEach(s => s.classList.add('hidden'));
+                    screens.admin.classList.remove('hidden');
+                    mainContainer.classList.replace('max-w-lg', 'max-w-5xl');
+                    loadAdminData();
+                } else {
+                    showAlert("অ্যাক্সেস ডিনাইড", "ভুল ইউজারনেম বা পাসওয়ার্ড।");
+                }
+            });
+
+            document.getElementById('logoutBtn').addEventListener('click', () => {
+                playersRef.off('value'); // Stop real-time listener
+                screens.admin.classList.add('hidden');
+                screens.intro.classList.remove('hidden'); // Go back to intro
+                mainContainer.classList.replace('max-w-5xl', 'max-w-lg');
+                window.playersData = {};
+            });
+
+            function loadAdminData() {
+                const list = document.getElementById('playersList');
+                list.innerHTML = '<div class="col-span-full text-center text-cyan-500 py-10 animate-pulse">ডেটা লোড হচ্ছে...</div>';
+
+                // Listen to database changes
+                playersRef.on('value', (snapshot) => {
+                    const players = [];
+                    window.playersData = {};
+                    
+                    snapshot.forEach(childSnapshot => {
+                        const data = { id: childSnapshot.key, ...childSnapshot.val() };
+                        players.push(data);
+                        window.playersData[childSnapshot.key] = data; // Cache for O(1) lookup during download
+                    });
+                    
+                    players.sort((a, b) => b.timestamp - a.timestamp);
+                    renderPlayersList(players, list);
+                }, (error) => {
+                    list.innerHTML = '<div class="col-span-full text-center text-red-500 py-10">কানেকশন সমস্যা</div>';
+                });
+            }
+
+            function renderPlayersList(players, container) {
+                if (players.length === 0) {
+                    container.innerHTML = '<div class="col-span-full text-center text-cyan-700 py-10">কোনো ডেটা পাওয়া যায়নি</div>';
+                    return;
+                }
+                container.innerHTML = '';
+                
+                // Algorithmic Complexity: O(N) where N is number of players
+                players.forEach(p => {
+                    const card = document.createElement('div');
+                    card.className = "bg-black/40 border border-cyan-500/30 p-4 rounded-lg flex flex-col gap-3 hover:border-gold-500/50 transition";
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between border-b border-cyan-500/20 pb-3">
+                            <div class="flex items-center gap-4">
+                                <img src="${p.profilePhoto}" class="w-12 h-12 rounded-full object-cover border border-cyan-400">
+                                <div>
+                                    <h3 class="text-lg font-bold text-white cyber-font">${p.playerName}</h3>
+                                    <p class="text-[10px] text-cyan-300">Ma: ${p.motherName} | Bro: ${p.brotherName}</p>
+                                </div>
+                            </div>
+                            <button data-id="${p.id}" class="download-docs-btn btn-gold border px-3 py-1.5 rounded text-[10px] cyber-font tracking-wide font-bold">
+                                DOWNLOAD DOCS
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2 mt-1">
+                            <div class="flex flex-col"><span class="text-[9px] text-cyan-600 mb-1">Aadhaar</span><img src="${p.aadhaarPhoto}" class="w-full h-12 object-cover rounded opacity-80 border border-cyan-900"></div>
+                            <div class="flex flex-col"><span class="text-[9px] text-cyan-600 mb-1">Birth Cert</span><img src="${p.birthCertPhoto}" class="w-full h-12 object-cover rounded opacity-80 border border-cyan-900"></div>
+                            <div class="flex flex-col"><span class="text-[9px] text-pink-700 mb-1">Bro Aadhaar</span><img src="${p.brotherAadhaarPhoto}" class="w-full h-12 object-cover rounded opacity-80 border border-pink-900"></div>
+                            <div class="flex flex-col"><span class="text-[9px] text-pink-700 mb-1">Bro Birth</span><img src="${p.brotherBirthCertPhoto}" class="w-full h-12 object-cover rounded opacity-80 border border-pink-900"></div>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+
+                document.querySelectorAll('.download-docs-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        downloadAllDocs(this.getAttribute('data-id'));
+                    });
+                });
+            }
+
+            function downloadAllDocs(playerId) {
+                const p = window.playersData[playerId];
+                if (!p) return;
+
+                const safeName = p.playerName.replace(/\s+/g, '_');
+                const filesToDownload = [
+                    { data: p.profilePhoto, suffix: 'Profile' },
+                    { data: p.aadhaarPhoto, suffix: 'Aadhaar' },
+                    { data: p.birthCertPhoto, suffix: 'Birth_Certificate' },
+                    { data: p.brotherAadhaarPhoto, suffix: 'Brother_Aadhaar' },
+                    { data: p.brotherBirthCertPhoto, suffix: 'Brother_Birth_Certificate' }
+                ];
+
+                filesToDownload.forEach((file, index) => {
+                    if (file.data) {
+                        setTimeout(() => {
+                            const a = document.createElement('a');
+                            a.href = file.data;
+                            a.download = `${safeName}_${file.suffix}.jpg`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                        }, index * 300); // Sequence downloads to prevent browser blocking
+                    }
+                });
+                
+                showAlert("ডাউনলোড শুরু হয়েছে", "ছবিগুলো আপনার ডিভাইসে সেভ হচ্ছে।");
+            }
+        });
+    </script>
+</body>
+</html>
